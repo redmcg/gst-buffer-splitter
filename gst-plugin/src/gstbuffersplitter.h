@@ -66,6 +66,8 @@ struct _Gstbuffersplitter
   gsize   delimiter_size;
 
   GstBuffer *buffer;
+
+  gboolean allow_multiple;
 };
 
 G_END_DECLS

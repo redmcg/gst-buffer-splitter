@@ -77,7 +77,8 @@ enum
 enum
 {
   PROP_0,
-  PROP_DELIMITER
+  PROP_DELIMITER,
+  PROP_ALLOWMULTIPLE
 };
 
 /* the capabilities of the inputs and outputs.
@@ -130,6 +131,10 @@ gst_buffersplitter_class_init (GstbuffersplitterClass * klass)
   g_object_class_install_property (gobject_class, PROP_DELIMITER,
       g_param_spec_string ("delimiter", "Delimiter", "The sequence of bytes on which to split",
           FALSE, G_PARAM_READWRITE));
+
+  g_object_class_install_property (gobject_class, PROP_ALLOWMULTIPLE,
+      g_param_spec_boolean ("allowmultiple", "Allow Multiple", "Allow multiple items in a single buffer",
+          TRUE, G_PARAM_READWRITE));
 
   gst_element_class_set_details_simple (gstelement_class,
       "buffersplitter",
@@ -199,6 +204,9 @@ gst_buffersplitter_set_property (GObject * object, guint prop_id,
       filter->delimiter = g_value_get_string (value);
       update_bytes(filter);
       break;
+    case PROP_ALLOWMULTIPLE:
+      filter->allow_multiple = g_value_get_boolean (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -214,6 +222,9 @@ gst_buffersplitter_get_property (GObject * object, guint prop_id,
   switch (prop_id) {
     case PROP_DELIMITER:
       g_value_set_string (value, filter->delimiter);
+      break;
+    case PROP_ALLOWMULTIPLE:
+      g_value_set_boolean (value, filter->allow_multiple);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -262,7 +273,7 @@ static const guint8* next_buffer(Gstbuffersplitter * filter, const guint8 *buff,
   
     ptr++; // skip first byte
 
-    while (!next && ptr <= end - 5) {
+    while ((filter->allow_multiple || !next) && ptr <= end - 5) {
         gsize i;
         for (i = 0; i < filter->delimiter_size && ptr[i] == filter->delimiter_bytes[i]; i++);
         if (i == filter->delimiter_size)
