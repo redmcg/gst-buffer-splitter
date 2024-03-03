@@ -60,8 +60,6 @@
 #  include <config.h>
 #endif
 
-#include <gst/gst.h>
-
 #include "gstbuffersplitter.h"
 
 GST_DEBUG_CATEGORY_STATIC (gst_buffersplitter_debug);
@@ -165,13 +163,14 @@ static void update_bytes(GstbuffersplitterPrivate * splitter)
 // TODO: add support for lowercase chars
 #define CHAR_TO_NIBBLE(x) (x >= '0' && x <= '9' ? x - '0' : x - 'A')
   const gchar *ascii = splitter->delimiter;
-  g_free(splitter->delimiter_bytes);
   gsize bytesize = (strlen(ascii)+1)/2;
   guint8 *bytes = malloc(bytesize);
+
   for (gsize i = 0; i < bytesize; i++)
     bytes[i] = CHAR_TO_NIBBLE(ascii[i*2]) << 4 | CHAR_TO_NIBBLE(ascii[i*2+1]);
 
   splitter->delimiter_size = bytesize;
+  g_free(splitter->delimiter_bytes);
   splitter->delimiter_bytes = bytes;
 }
 
@@ -244,10 +243,11 @@ static gboolean gst_buffersplitter_start (GstBaseParse * parse)
 static gboolean gst_buffersplitter_set_sink_caps (GstBaseParse * parse, GstCaps * caps)
 {
   Gstbuffersplitter *splitter;
+  GstCaps *downstream_caps;
   splitter = GST_BUFFER_SPLITTER (parse);
 
   GST_DEBUG_OBJECT(splitter, "%" GST_PTR_FORMAT, caps);
-  GstCaps *downstream_caps = gst_caps_fixate(gst_pad_peer_query_caps(splitter->element.srcpad, caps));
+  downstream_caps = gst_caps_fixate(gst_pad_peer_query_caps(splitter->element.srcpad, caps));
   GST_LOG_OBJECT(splitter, "set srcpad caps: %" GST_PTR_FORMAT, downstream_caps);
   gst_pad_set_caps(splitter->element.srcpad, downstream_caps);
   return TRUE;
@@ -276,6 +276,9 @@ static GstFlowReturn gst_buffersplitter_handle_frame (GstBaseParse * parse,
     GstBaseParseFrame * frame, gint * skipsize)
 {
   Gstbuffersplitter *splitter;
+  GstbuffersplitterPrivate *priv;
+  GstMapInfo map;
+  const guint8 *end, *next;
   splitter = GST_BUFFER_SPLITTER (parse);
 
   if (!gst_pad_has_current_caps(splitter->element.srcpad))
@@ -285,12 +288,10 @@ static GstFlowReturn gst_buffersplitter_handle_frame (GstBaseParse * parse,
     gst_pad_set_caps(splitter->element.srcpad, caps);
   }
 
-  GstMapInfo map;
   gst_buffer_map(frame->buffer, &map, GST_MAP_READ);
 
-  const guint8 *end = map.data + map.size;
-  const guint8 *next;
-  GstbuffersplitterPrivate *priv = gst_buffersplitter_get_instance_private (splitter);
+  end = map.data + map.size;
+  priv = gst_buffersplitter_get_instance_private (splitter);
   next = next_buffer(priv, map.data, end);
 
   if (next)
