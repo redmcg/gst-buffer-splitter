@@ -69,11 +69,6 @@ typedef struct _GstbuffersplitterClass GstbuffersplitterClass;
 struct _Gstbuffersplitter
 {
   GstBaseParse element;
-
-  const gchar* delimiter;
-  // TODO: make these private
-  guint8* delimiter_bytes;
-  gsize   delimiter_size;
 };
 
 struct _GstbuffersplitterClass {

@@ -80,6 +80,15 @@ enum
   PROP_DELIMITER,
 };
 
+typedef struct _GstbuffersplitterPrivate GstbuffersplitterPrivate;
+
+struct _GstbuffersplitterPrivate
+{
+  const gchar* delimiter;
+  guint8* delimiter_bytes;
+  gsize   delimiter_size;
+};
+
 /* the capabilities of the inputs and outputs.
  *
  * describe the real formats here.
@@ -97,7 +106,7 @@ static GstStaticPadTemplate src_factory = GST_STATIC_PAD_TEMPLATE ("src",
     );
 
 #define gst_buffersplitter_parent_class parent_class
-G_DEFINE_TYPE (Gstbuffersplitter, gst_buffersplitter, GST_TYPE_BASE_PARSE);
+G_DEFINE_TYPE_WITH_PRIVATE (Gstbuffersplitter, gst_buffersplitter, GST_TYPE_BASE_PARSE);
 
 GST_ELEMENT_REGISTER_DEFINE (buffersplitter, "buffersplitter", GST_RANK_NONE,
     GST_TYPE_BUFFER_SPLITTER);
@@ -151,7 +160,7 @@ gst_buffersplitter_class_init (GstbuffersplitterClass * klass)
 }
 
 /* ascii must have an even number of chars */
-static void update_bytes(Gstbuffersplitter * splitter)
+static void update_bytes(GstbuffersplitterPrivate * splitter)
 {
 // TODO: add support for lowercase chars
 #define CHAR_TO_NIBBLE(x) (x >= '0' && x <= '9' ? x - '0' : x - 'A')
@@ -174,14 +183,14 @@ static void update_bytes(Gstbuffersplitter * splitter)
 static void
 gst_buffersplitter_init (Gstbuffersplitter * splitter)
 {
-  splitter->delimiter = "000001";
+  GstbuffersplitterPrivate *priv = gst_buffersplitter_get_instance_private (splitter);
+  priv->delimiter = "000001";
 
-  // TODO: make this data private
-  splitter->delimiter_size = 3;
-  splitter->delimiter_bytes = g_malloc(splitter->delimiter_size);
-  splitter->delimiter_bytes[0] = 0;
-  splitter->delimiter_bytes[1] = 0;
-  splitter->delimiter_bytes[2] = 1;
+  priv->delimiter_size = 3;
+  priv->delimiter_bytes = g_malloc(priv->delimiter_size);
+  priv->delimiter_bytes[0] = 0;
+  priv->delimiter_bytes[1] = 0;
+  priv->delimiter_bytes[2] = 1;
 }
 
 static void
@@ -189,12 +198,13 @@ gst_buffersplitter_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
   Gstbuffersplitter *splitter = GST_BUFFER_SPLITTER (object);
+  GstbuffersplitterPrivate *priv = gst_buffersplitter_get_instance_private (splitter);
 
   switch (prop_id) {
     case PROP_DELIMITER:
       // TODO: validate an even number of hex-only chars
-      splitter->delimiter = g_value_get_string (value);
-      update_bytes(splitter);
+      priv->delimiter = g_value_get_string (value);
+      update_bytes(priv);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -207,10 +217,11 @@ gst_buffersplitter_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec)
 {
   Gstbuffersplitter *splitter = GST_BUFFER_SPLITTER (object);
+  GstbuffersplitterPrivate *priv = gst_buffersplitter_get_instance_private (splitter);
 
   switch (prop_id) {
     case PROP_DELIMITER:
-      g_value_set_string (value, splitter->delimiter);
+      g_value_set_string (value, priv->delimiter);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -223,8 +234,9 @@ gst_buffersplitter_get_property (GObject * object, guint prop_id,
 static gboolean gst_buffersplitter_start (GstBaseParse * parse)
 {
   Gstbuffersplitter *splitter = GST_BUFFER_SPLITTER (parse);
+  GstbuffersplitterPrivate *priv = gst_buffersplitter_get_instance_private (splitter);
 
-  gst_base_parse_set_min_frame_size (parse, splitter->delimiter_size+1);
+  gst_base_parse_set_min_frame_size (parse, priv->delimiter_size+1);
 
   return TRUE;
 }
@@ -241,7 +253,7 @@ static gboolean gst_buffersplitter_set_sink_caps (GstBaseParse * parse, GstCaps 
   return TRUE;
 }
 
-static const guint8* next_buffer(Gstbuffersplitter * splitter, const guint8 *buff, const guint8 *end)
+static const guint8* next_buffer(GstbuffersplitterPrivate * splitter, const guint8 *buff, const guint8 *end)
 {
   const guint8 *next = NULL;
   const guint8 *ptr = buff;
@@ -278,7 +290,8 @@ static GstFlowReturn gst_buffersplitter_handle_frame (GstBaseParse * parse,
 
   const guint8 *end = map.data + map.size;
   const guint8 *next;
-  next = next_buffer(splitter, map.data, end);
+  GstbuffersplitterPrivate *priv = gst_buffersplitter_get_instance_private (splitter);
+  next = next_buffer(priv, map.data, end);
 
   if (next)
     gst_base_parse_finish_frame(parse, frame, next - map.data);
