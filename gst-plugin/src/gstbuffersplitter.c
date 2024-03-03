@@ -281,6 +281,8 @@ static GstFlowReturn gst_buffersplitter_handle_frame (GstBaseParse * parse,
 
   if (next)
     gst_base_parse_finish_frame(parse, frame, next - map.data);
+  else if (GST_BASE_PARSE_DRAINING(parse))
+    gst_base_parse_finish_frame(parse, frame, end - map.data);
 
   return GST_FLOW_OK;
 }
