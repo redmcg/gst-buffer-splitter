@@ -3,7 +3,7 @@
  * Copyright (C) 2005 Thomas Vander Stichele <thomas@apestaart.org>
  * Copyright (C) 2005 Ronald S. Bultje <rbultje@ronald.bitfreak.net>
  * Copyright (C) 2024 Brendan McGrath <brendan@redmandi.com>
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
  * to deal in the Software without restriction, including without limitation
@@ -78,7 +78,6 @@ enum
 {
   PROP_0,
   PROP_DELIMITER,
-  PROP_ALLOWMULTIPLE
 };
 
 /* the capabilities of the inputs and outputs.
@@ -98,20 +97,20 @@ static GstStaticPadTemplate src_factory = GST_STATIC_PAD_TEMPLATE ("src",
     );
 
 #define gst_buffersplitter_parent_class parent_class
-G_DEFINE_TYPE (Gstbuffersplitter, gst_buffersplitter, GST_TYPE_ELEMENT);
+G_DEFINE_TYPE (Gstbuffersplitter, gst_buffersplitter, GST_TYPE_BASE_PARSE);
 
 GST_ELEMENT_REGISTER_DEFINE (buffersplitter, "buffersplitter", GST_RANK_NONE,
     GST_TYPE_BUFFER_SPLITTER);
+
+static gboolean gst_buffersplitter_start (GstBaseParse * parse);
+
+static GstFlowReturn gst_buffersplitter_handle_frame (GstBaseParse * parse,
+    GstBaseParseFrame * frame, gint * skipsize);
 
 static void gst_buffersplitter_set_property (GObject * object,
     guint prop_id, const GValue * value, GParamSpec * pspec);
 static void gst_buffersplitter_get_property (GObject * object,
     guint prop_id, GValue * value, GParamSpec * pspec);
-
-static gboolean gst_buffersplitter_sink_event (GstPad * pad,
-    GstObject * parent, GstEvent * event);
-static GstFlowReturn gst_buffersplitter_chain (GstPad * pad,
-    GstObject * parent, GstBuffer * buf);
 
 /* GObject vmethod implementations */
 
@@ -121,9 +120,11 @@ gst_buffersplitter_class_init (GstbuffersplitterClass * klass)
 {
   GObjectClass *gobject_class;
   GstElementClass *gstelement_class;
+  GstBaseParseClass *parse_class;
 
   gobject_class = (GObjectClass *) klass;
   gstelement_class = (GstElementClass *) klass;
+  parse_class = GST_BASE_PARSE_CLASS (klass);
 
   gobject_class->set_property = gst_buffersplitter_set_property;
   gobject_class->get_property = gst_buffersplitter_get_property;
@@ -131,10 +132,6 @@ gst_buffersplitter_class_init (GstbuffersplitterClass * klass)
   g_object_class_install_property (gobject_class, PROP_DELIMITER,
       g_param_spec_string ("delimiter", "Delimiter", "The sequence of bytes on which to split",
           FALSE, G_PARAM_READWRITE));
-
-  g_object_class_install_property (gobject_class, PROP_ALLOWMULTIPLE,
-      g_param_spec_boolean ("allowmultiple", "Allow Multiple", "Allow multiple items in a single buffer",
-          TRUE, G_PARAM_READWRITE));
 
   gst_element_class_set_details_simple (gstelement_class,
       "buffersplitter",
@@ -145,22 +142,25 @@ gst_buffersplitter_class_init (GstbuffersplitterClass * klass)
       gst_static_pad_template_get (&src_factory));
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&sink_factory));
+
+  parse_class->start = GST_DEBUG_FUNCPTR (gst_buffersplitter_start);
+  parse_class->handle_frame = GST_DEBUG_FUNCPTR (gst_buffersplitter_handle_frame);
 }
 
 /* ascii must have an even number of chars */
-static void update_bytes(Gstbuffersplitter * filter)
+static void update_bytes(Gstbuffersplitter * splitter)
 {
 // TODO: add support for lowercase chars
 #define CHAR_TO_NIBBLE(x) (x >= '0' && x <= '9' ? x - '0' : x - 'A')
-  const gchar *ascii = filter->delimiter;
-  g_free(filter->delimiter_bytes);
+  const gchar *ascii = splitter->delimiter;
+  g_free(splitter->delimiter_bytes);
   gsize bytesize = (strlen(ascii)+1)/2;
   guint8 *bytes = malloc(bytesize);
   for (gsize i = 0; i < bytesize; i++)
     bytes[i] = CHAR_TO_NIBBLE(ascii[i*2]) << 4 | CHAR_TO_NIBBLE(ascii[i*2+1]);
 
-  filter->delimiter_size = bytesize;
-  filter->delimiter_bytes = bytes;
+  splitter->delimiter_size = bytesize;
+  splitter->delimiter_bytes = bytes;
 }
 
 /* initialize the new element
@@ -169,43 +169,29 @@ static void update_bytes(Gstbuffersplitter * filter)
  * initialize instance structure
  */
 static void
-gst_buffersplitter_init (Gstbuffersplitter * filter)
+gst_buffersplitter_init (Gstbuffersplitter * splitter)
 {
-  filter->sinkpad = gst_pad_new_from_static_template (&sink_factory, "sink");
-  gst_pad_set_event_function (filter->sinkpad,
-      GST_DEBUG_FUNCPTR (gst_buffersplitter_sink_event));
-  gst_pad_set_chain_function (filter->sinkpad,
-      GST_DEBUG_FUNCPTR (gst_buffersplitter_chain));
-  GST_PAD_SET_PROXY_CAPS (filter->sinkpad);
-  gst_element_add_pad (GST_ELEMENT (filter), filter->sinkpad);
+  splitter->delimiter = "000001";
 
-  filter->srcpad = gst_pad_new_from_static_template (&src_factory, "src");
-  GST_PAD_SET_PROXY_CAPS (filter->srcpad);
-  gst_element_add_pad (GST_ELEMENT (filter), filter->srcpad);
-
-  filter->buffer = gst_buffer_new();
-  filter->delimiter = "000001";
-  filter->delimiter_size = 3;
-  filter->delimiter_bytes = g_malloc(filter->delimiter_size);
-  filter->delimiter_bytes[0] = 0;
-  filter->delimiter_bytes[1] = 0;
-  filter->delimiter_bytes[2] = 1;
+  // TODO: make this data private
+  splitter->delimiter_size = 3;
+  splitter->delimiter_bytes = g_malloc(splitter->delimiter_size);
+  splitter->delimiter_bytes[0] = 0;
+  splitter->delimiter_bytes[1] = 0;
+  splitter->delimiter_bytes[2] = 1;
 }
 
 static void
 gst_buffersplitter_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
-  Gstbuffersplitter *filter = GST_BUFFER_SPLITTER (object);
+  Gstbuffersplitter *splitter = GST_BUFFER_SPLITTER (object);
 
   switch (prop_id) {
     case PROP_DELIMITER:
       // TODO: validate an even number of hex-only chars
-      filter->delimiter = g_value_get_string (value);
-      update_bytes(filter);
-      break;
-    case PROP_ALLOWMULTIPLE:
-      filter->allow_multiple = g_value_get_boolean (value);
+      splitter->delimiter = g_value_get_string (value);
+      update_bytes(splitter);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -217,14 +203,11 @@ static void
 gst_buffersplitter_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec)
 {
-  Gstbuffersplitter *filter = GST_BUFFER_SPLITTER (object);
+  Gstbuffersplitter *splitter = GST_BUFFER_SPLITTER (object);
 
   switch (prop_id) {
     case PROP_DELIMITER:
-      g_value_set_string (value, filter->delimiter);
-      break;
-    case PROP_ALLOWMULTIPLE:
-      g_value_set_boolean (value, filter->allow_multiple);
+      g_value_set_string (value, splitter->delimiter);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -232,103 +215,59 @@ gst_buffersplitter_get_property (GObject * object, guint prop_id,
   }
 }
 
-/* GstElement vmethod implementations */
+/* GstBaseParse vmethod implementations */
 
-/* this function handles sink events */
-static gboolean
-gst_buffersplitter_sink_event (GstPad * pad, GstObject * parent,
-    GstEvent * event)
+static gboolean gst_buffersplitter_start (GstBaseParse * parse)
 {
-  Gstbuffersplitter *filter;
-  gboolean ret;
+  Gstbuffersplitter *splitter = GST_BUFFER_SPLITTER (parse);
 
-  filter = GST_BUFFER_SPLITTER (parent);
+  gst_base_parse_set_min_frame_size (parse, splitter->delimiter_size+1);
 
-  GST_LOG_OBJECT (filter, "Received %s event: %" GST_PTR_FORMAT,
-      GST_EVENT_TYPE_NAME (event), event);
+  return TRUE;
+}
 
-  switch (GST_EVENT_TYPE (event)) {
-    case GST_EVENT_CAPS:
-    {
-      GstCaps *caps;
+static const guint8* next_buffer(Gstbuffersplitter * splitter, const guint8 *buff, const guint8 *end)
+{
+  const guint8 *next = NULL;
+  const guint8 *ptr = buff;
 
-      gst_event_parse_caps (event, &caps);
-      /* do something with the caps */
+  ptr++; // skip first byte
 
-      /* and forward */
-      ret = gst_pad_event_default (pad, parent, event);
-      break;
-    }
-    default:
-      ret = gst_pad_event_default (pad, parent, event);
-      break;
+  while (!next && ptr <= end - 5) {
+    gsize i;
+    for (i = 0; i < splitter->delimiter_size && ptr[i] == splitter->delimiter_bytes[i]; i++);
+    if (i == splitter->delimiter_size)
+      next = ptr;
+    ptr++;
   }
-  return ret;
+
+  return next;
 }
 
-static const guint8* next_buffer(Gstbuffersplitter * filter, const guint8 *buff, const guint8 *end)
+static GstFlowReturn gst_buffersplitter_handle_frame (GstBaseParse * parse,
+    GstBaseParseFrame * frame, gint * skipsize)
 {
-    const guint8 *next = NULL;
-    const guint8 *ptr = buff;
-  
-    ptr++; // skip first byte
+  Gstbuffersplitter *splitter;
+  splitter = GST_BUFFER_SPLITTER (parse);
 
-    while ((filter->allow_multiple || !next) && ptr <= end - 5) {
-        gsize i;
-        for (i = 0; i < filter->delimiter_size && ptr[i] == filter->delimiter_bytes[i]; i++);
-        if (i == filter->delimiter_size)
-            next = ptr;
-        ptr++;
-    }
+  if (!gst_pad_has_current_caps(splitter->element.srcpad))
+  {
+    GstCaps *caps = gst_caps_fixate(gst_pad_peer_query_caps(splitter->element.srcpad, NULL));
+    gst_pad_set_caps(splitter->element.srcpad, caps);
+  }
 
-    return next;
-}
-
-
-/* chain function
- * this function does the actual processing
- */
-static GstFlowReturn
-gst_buffersplitter_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
-{
-  Gstbuffersplitter *filter;
-
-  filter = GST_BUFFER_SPLITTER (parent);
-
-  filter->buffer = gst_buffer_append(filter->buffer, buf);
-  
-  GstFlowReturn ret = GST_FLOW_OK;
   GstMapInfo map;
-  if (!gst_buffer_map(filter->buffer, &map, GST_MAP_READ)) {
-    GST_ERROR("Couldn't map memory");
-    ret = GST_FLOW_ERROR;
-    goto out;
-  }
+  gst_buffer_map(frame->buffer, &map, GST_MAP_READ);
 
-  gboolean sent = FALSE;
   const guint8 *end = map.data + map.size;
   const guint8 *next;
-  GstBuffer *send, *keep;
-  while (ret == GST_FLOW_OK && (next = next_buffer(filter, map.data, end))) {
-    send = gst_buffer_new_memdup(map.data, next - map.data);
-    ret = gst_pad_push (filter->srcpad, send);
-    if (ret == GST_FLOW_OK) {
-      sent = TRUE;
-      map.data = (guint8*) next;
-    }
-  }
-  if (sent)
-      keep = gst_buffer_new_memdup(map.data, end - map.data);
-  gst_buffer_unmap(filter->buffer, &map);
-  if (sent) {
-    gst_buffer_unref(filter->buffer);
-    filter->buffer = keep;
-  }
+  next = next_buffer(splitter, map.data, end);
 
-out:
-  return ret;
+  if (next)
+    gst_base_parse_finish_frame(parse, frame, next - map.data);
+
+  return GST_FLOW_OK;
 }
-
 
 /* entry point to initialize the plug-in
  * initialize the plug-in itself

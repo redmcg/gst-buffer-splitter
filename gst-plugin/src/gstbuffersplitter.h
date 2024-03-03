@@ -4,7 +4,7 @@
  * Copyright (C) 2005 Ronald S. Bultje <rbultje@ronald.bitfreak.net>
  * Copyright (C) 2020 Niels De Graef <niels.degraef@gmail.com>
  * Copyright (C) 2024 Brendan McGrath <brendan@redmandi.com>
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
  * to deal in the Software without restriction, including without limitation
@@ -48,26 +48,36 @@
 #define __GST_BUFFER_SPLITTER_H__
 
 #include <gst/gst.h>
+#include <gst/base/gstbaseparse.h>
 
 G_BEGIN_DECLS
 
 #define GST_TYPE_BUFFER_SPLITTER (gst_buffersplitter_get_type())
-G_DECLARE_FINAL_TYPE (Gstbuffersplitter, gst_buffersplitter,
-    GST, BUFFER_SPLITTER, GstElement)
+#define GST_BUFFER_SPLITTER(obj) \
+  (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_BUFFER_SPLITTER, Gstbuffersplitter))
+#define GST_BUFFER_SPLITTER_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_BUFFER_SPLITTER, GstbuffersplitterClass))
+#define GST_IS_BUFFER_SPLITTER(obj) \
+  (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_BUFFER_SPLITTER))
+#define GST_IS_BUFFER_SPLITTER_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_BUFFER_SPLITTER))
+
+
+typedef struct _Gstbuffersplitter Gstbuffersplitter;
+typedef struct _GstbuffersplitterClass GstbuffersplitterClass;
 
 struct _Gstbuffersplitter
 {
-  GstElement element;
-
-  GstPad *sinkpad, *srcpad;
+  GstBaseParse element;
 
   const gchar* delimiter;
+  // TODO: make these private
   guint8* delimiter_bytes;
   gsize   delimiter_size;
+};
 
-  GstBuffer *buffer;
-
-  gboolean allow_multiple;
+struct _GstbuffersplitterClass {
+  GstBaseParseClass parent_class;
 };
 
 G_END_DECLS
