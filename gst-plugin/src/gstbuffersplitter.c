@@ -247,8 +247,9 @@ static const guint8* next_buffer(Gstbuffersplitter * splitter, const guint8 *buf
   const guint8 *ptr = buff;
 
   ptr++; // skip first byte
+  end -= splitter->delimiter_size;
 
-  while (!next && ptr <= end - 5) {
+  while (!next && ptr <= end) {
     gsize i;
     for (i = 0; i < splitter->delimiter_size && ptr[i] == splitter->delimiter_bytes[i]; i++);
     if (i == splitter->delimiter_size)
