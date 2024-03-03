@@ -104,6 +104,8 @@ GST_ELEMENT_REGISTER_DEFINE (buffersplitter, "buffersplitter", GST_RANK_NONE,
 
 static gboolean gst_buffersplitter_start (GstBaseParse * parse);
 
+static gboolean gst_buffersplitter_set_sink_caps (GstBaseParse * parse, GstCaps * caps);
+
 static GstFlowReturn gst_buffersplitter_handle_frame (GstBaseParse * parse,
     GstBaseParseFrame * frame, gint * skipsize);
 
@@ -144,6 +146,7 @@ gst_buffersplitter_class_init (GstbuffersplitterClass * klass)
       gst_static_pad_template_get (&sink_factory));
 
   parse_class->start = GST_DEBUG_FUNCPTR (gst_buffersplitter_start);
+  parse_class->set_sink_caps = GST_DEBUG_FUNCPTR (gst_buffersplitter_set_sink_caps);
   parse_class->handle_frame = GST_DEBUG_FUNCPTR (gst_buffersplitter_handle_frame);
 }
 
@@ -226,6 +229,18 @@ static gboolean gst_buffersplitter_start (GstBaseParse * parse)
   return TRUE;
 }
 
+static gboolean gst_buffersplitter_set_sink_caps (GstBaseParse * parse, GstCaps * caps)
+{
+  Gstbuffersplitter *splitter;
+  splitter = GST_BUFFER_SPLITTER (parse);
+
+  GST_DEBUG_OBJECT(splitter, "%" GST_PTR_FORMAT, caps);
+  GstCaps *downstream_caps = gst_caps_fixate(gst_pad_peer_query_caps(splitter->element.srcpad, caps));
+  GST_LOG_OBJECT(splitter, "set srcpad caps: %" GST_PTR_FORMAT, downstream_caps);
+  gst_pad_set_caps(splitter->element.srcpad, downstream_caps);
+  return TRUE;
+}
+
 static const guint8* next_buffer(Gstbuffersplitter * splitter, const guint8 *buff, const guint8 *end)
 {
   const guint8 *next = NULL;
@@ -253,6 +268,7 @@ static GstFlowReturn gst_buffersplitter_handle_frame (GstBaseParse * parse,
   if (!gst_pad_has_current_caps(splitter->element.srcpad))
   {
     GstCaps *caps = gst_caps_fixate(gst_pad_peer_query_caps(splitter->element.srcpad, NULL));
+    GST_LOG_OBJECT(splitter, "set srcpad caps: %" GST_PTR_FORMAT, caps);
     gst_pad_set_caps(splitter->element.srcpad, caps);
   }
 
