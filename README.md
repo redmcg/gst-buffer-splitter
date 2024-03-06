@@ -12,13 +12,13 @@ gst-launch-1.0 --gst-plugin-path=builddir/gst-plugin filesrc location=input.h264
 or if your stream includes Access Unit Delimiters, you could use:
 ```
 gst-launch-1.0 --gst-plugin-path=builddir/gst-plugin filesrc location=input.h264 ! \
-    buffersplitter delimiter=0000000109 ! video/x-h264,framerate=30/1 ! avdec_h264 ! xvimagesink
+    buffersplitter delimiter=0000000109 ! video/x-h264,framerate=30/1,stream-format=byte-stream ! avdec_h264 ! xvimagesink
 ```
 
 or for a more complex scenario, use both at the same time:
 ```
 gst-launch-1.0 --gst-plugin-path=builddir/gst-plugin filesrc location=input.h264 ! \
-    video/x-h264,framerate=30/1 ! tee \
+    video/x-h264,framerate=30/1,stream-format=byte-stream ! tee \
               ! queue ! buffersplitter delimiter=0000000109 ! avdec_h264 ! xvimagesink \
         tee0. ! queue ! buffersplitter ! video/x-h264,alignment=nal ! avdec_h264 ! xvimagesink
 ```
