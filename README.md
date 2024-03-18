@@ -59,7 +59,7 @@ directory (best to specify an absolute path though).
 
 You can also check if it has been built correctly with:
 
-    gst-inspect-1.0 builddir/gst-plugin/libgstbuffersplitter.so
+    gst-inspect-1.0 builddir/gst-plugin/libgstbuffermanipulator.so
 
 
 [MIT]: http://www.opensource.org/licenses/mit-license.php or COPYING.MIT

@@ -306,7 +306,7 @@ static GstFlowReturn gst_buffersplitter_handle_frame (GstBaseParse * parse,
  * initialize the plug-in itself
  * register the element factories and other features
  */
-static gboolean
+gboolean
 buffersplitter_init (GstPlugin * buffersplitter)
 {
   /* debug category for filtering log messages
@@ -318,23 +318,3 @@ buffersplitter_init (GstPlugin * buffersplitter)
 
   return GST_ELEMENT_REGISTER (buffersplitter, buffersplitter);
 }
-
-/* PACKAGE: this is usually set by meson depending on some _INIT macro
- * in meson.build and then written into and defined in config.h, but we can
- * just set it ourselves here in case someone doesn't use meson to
- * compile this code. GST_PLUGIN_DEFINE needs PACKAGE to be defined.
- */
-#ifndef PACKAGE
-#define PACKAGE "myfirstbuffersplitter"
-#endif
-
-/* gstreamer looks for this structure to register buffersplitters
- *
- * exchange the string 'Template buffersplitter' with your buffersplitter description
- */
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
-    GST_VERSION_MINOR,
-    buffersplitter,
-    "buffersplitter",
-    buffersplitter_init,
-    PACKAGE_VERSION, GST_LICENSE, GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)
