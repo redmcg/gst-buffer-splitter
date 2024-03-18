@@ -180,7 +180,7 @@ send_it(Gstbufferjoiner *filter)
     {
       buffer = next;
     }
-    free(item);
+    g_free(item);
   }
   GST_LOG_OBJECT(GST_OBJECT(filter->srcpad), "sending %" GST_PTR_FORMAT, buffer);
   return gst_pad_push(filter->srcpad, buffer);
@@ -309,7 +309,7 @@ gst_bufferjoiner_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 {
   Gstbufferjoiner *filter;
   GstDataQueueSize size;
-  GstDataQueueItem *item = malloc(sizeof(*item));
+  GstDataQueueItem *item = g_malloc(sizeof(*item));
   gboolean ret;
   item->object = GST_MINI_OBJECT(buf);
   item->size = gst_buffer_get_size(buf);

@@ -164,7 +164,7 @@ static void update_bytes(GstbuffersplitterPrivate * splitter)
 #define CHAR_TO_NIBBLE(x) (x >= '0' && x <= '9' ? x - '0' : x - 'A')
   const gchar *ascii = splitter->delimiter;
   gsize bytesize = (strlen(ascii)+1)/2;
-  guint8 *bytes = malloc(bytesize);
+  guint8 *bytes = g_malloc(bytesize);
 
   for (gsize i = 0; i < bytesize; i++)
     bytes[i] = CHAR_TO_NIBBLE(ascii[i*2]) << 4 | CHAR_TO_NIBBLE(ascii[i*2+1]);
